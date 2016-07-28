@@ -1,0 +1,110 @@
+==== OVERVIEW ====
+Liaison model uses lexicon without alternative pronunciations
+
+Files in local/ used for liaison model : 
+- make_lexicon_fst_liaison.pl
+- prepare_lang_liaison.sh
+- validate_lang_liaison.pl
+- prepare_phones_add_liaisons.sh
+(clean_decode_log.sh makes decode text that is more readable)
+
+==== TERMINOLOGY ====
+"acceptor"
+- in this model : words that start with vowel phonemes "accept" a liaison
+
+"normal" 
+- non acceptors
+
+"generator" 
+- in this model : words that end with a zz or tt sound (z, s, x, t as final letter)
+- theoretically:  generate liaisons by causing "acceptors" that come after to take on this sound.
+
+e.g. : nous allons is pronounced nou zallon (nous is generator, allons is acceptor)
+
+
+==== INSTRUCTIONS FOR USE IN KALDI ====
+Run prepare_lang_liaison.sh in place of prepare_lang.sh
+Requires : lexicon.txt. Specify the directories as with prepare_lang.sh
+Produces : L.fst with liaison
+Calls on make_lexicon_fst_liaison.pl to create the L.fst
+Calls on prepare_phones_add_liaisons.sh to modify phones list etc to add _L case
+Calls on validate_lang_liaison.pl to verify _L case in L.fst
+
+
+==== EXPLANATION OF LIAISON MODEL ====
+Words that start with vowel phones branch out from "acceptor"
+Other words branch out from "normal"
+
+Generators defined as: if ending in z, x, s, t but not in zz or tt sound in lexicon, not singleton
+Branch out to six possibilities : 
+- Silence + normal
+- Silence + acceptor + no liaison
+- Silence + acceptor + liaison (silence before liaison)
+- No silence + normal
+- No silence + acceptor + no liaison
+- No silence + acceptor + liaison
+Corresponding probabilities are handled in make_lexicon_fst_liaison.pl. Silence probability as per normal, liaison probability can be changed. (Optimal for 200 monophone train set was )
+
+Words ending in z, x, s, t and in zz or tt phoneme in lexicon are treated as normal words
+
+- Subtleties : _B _E _I _S tags on all phonemes (begin, end, intermediate, singleton). Modification : _L is liaison tag, changes required also in verification and phone list, etc, so is handled by validate_lang_liaison.pl and prepare_phones_add_liaisons.sh. This also explains need of prez and pret state in L.fst construction.
+
+==== RESULTS OVERVIEW ====
+mono00 : WER 57% : didn't properly handle probabilities. (liaison2_mono00_57)
+mono01 : WER 62.2% : Fixed probabilities. Error: words that end in zz or tt phoneme considered generators -> doubled the zz and tt (liaison2_mono01_62)
+
+mono02 : WER 56.13% : 50% liaison proba (liaison2_mono02_56) (data/lang_liaison50)
+mono04 : WER 57.70% : 65% liaison proba (liaison2_mono04) (data/lang_liaison65)
+mono03 : WER 57.18% : 80% liaison proba (liaison2_mono03) (data/lang_liaison80)
+mono05 : WER 57.74% : 95% liaison proba (liaison2_mono05) (data/lang_liaison95)
+
+==== ERROR ANALYSIS ====
+Although WER for mono02 with liaison and without liaison is similar, on looking at the text produced, we can see that the model with liaison has learned liaison a lot better, and is able to predict, for example, in the first 30 examples of 8-1004-: 
+0002 : "vous avez" both predicted as "vous savez" instead
+0003 : "d'autres affaires" correctly instead of "d'autre chose à faire"
+0005 : "des ennemis" correctly instead of "déserts ni"
+0009 : "mes voeux ardents" correctly instead of "nerveuse adam"
+0011 : "doit avouer" as "toit avouer" instead of "porte avouer" (in lexicon, doit and toit as no tt phoneme while porte does)
+0019 : "les arrête" correctly instead of "lézard jette"
+0026 : "faut amuser" both predicted as "faute amuser" instead (80% : font amuser)
+0028 : "des hommes" correctly instead of "deshonneur"
+0029 : "fait à" predicted correctly by model without liaison, becomes "faire" in model with liaison
+
+The similar word error rates can be explained by a high "deletion" rate in liaison model as compared to without liaison. (sub and ins rate decreased)
+- possible explanation is that liaison model has the tendancy to predict three words or more as one word and so it counts as 3 errors? To confirm.
+If so, upping silence possibility might help?
+Adding silence at start and ends?
+Up train size?
+
+
+
+==== OUTDATED MODEL ====
+Using lexicon with alternative pronunciations:
+Liaison_orig overcompensates : creates liaison for sounds without liaison (generator)
+Liaison2 undercompensates : creates not enough liaisons (alt+generator)
+
+Original model (outdated) also requires :
+- clean_decode_log.sh
+- decode_liaison.sh
+- make_lexicon_fst_liaison_orig.pl
+- make_lexicon_fst_liaison_orig2.pl
+- prepare_lang_liaison2.sh
+- remove_rep.sh
+
+Run decode_liaison.sh instead of decode.sh
+This handles alternative pronunciations in scoring but only for text files, not lattice.
+Produces : decodefull.txt = transcript of machine
+Calls on clean_decode_log.sh, remove_rep.sh
+
+
+==== DETAILED CONCEPT BEHIND LIAISON_ORIG (outdated model) : ====
+Generators defined as words that end with tt or zz phonemes.
+Silence is moved before last phoneme to simulate liaison for "generators" - tt and zz sounds (two most common liaison sounds). Similar changes for sildisambig. Changes made to _I and _E tags.
+Terrible stochasticity due to G.fst being generated by train data without alternative pronunciations?
+WER 67% but since unable to match lattices for test data with (n), not the best result
+
+==== MODIFICATIONS TO LIAISON_ORIG2 (also outdated model) : ====
+"generators" have to fulfil additional condition of being an alternative pronunciation. 
+- This is to avoid cases like toute, which ends with tt but doesn't generate a liaison. 
+- We assume that most words that produce a liaison, such as nous, have a principal pronunciation that does not end with a tt or zz sound.
+- However, this fails to catch words such as bases, which ends with zz always and generates a liaison. 
