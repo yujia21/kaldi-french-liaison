@@ -8,7 +8,7 @@ use warnings; #sed replacement for -w perl parameter
 # Has two liaison generators : Z and T sounds (words ending with z,x,s,t)
 # Has two silence state : generator endings and normal endings
 
-$liaison_prob = 0.95; #can change this
+$liaison_prob = 0.5; #can change this
 $half_cost = -log(0.5); #split between acceptor and normal
 
 $pron_probs = 0;
